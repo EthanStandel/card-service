@@ -6,6 +6,7 @@ val koin_version: String by project
 plugins {
     application
     kotlin("jvm") version "1.6.0"
+    id("com.github.johnrengelman.shadow") version "7.0.0"
 }
 
 group = "io.standel.cards"
@@ -16,6 +17,14 @@ application {
 
 repositories {
     mavenCentral()
+}
+
+tasks{
+    shadowJar {
+        manifest {
+            attributes(Pair("Main-Class", "com.example.ApplicationKt"))
+        }
+    }
 }
 
 dependencies {
