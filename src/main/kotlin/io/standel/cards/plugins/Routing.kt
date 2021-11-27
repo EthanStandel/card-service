@@ -1,38 +1,32 @@
 package io.standel.cards.plugins
 
+import com.google.gson.Gson
 import io.ktor.routing.*
-import io.ktor.http.*
 import io.ktor.application.*
 import io.ktor.features.*
 import io.ktor.response.*
-import io.ktor.request.*
-import io.standel.cards.models.request.ShuffleDeckRequest
+import io.standel.cards.models.Card
+import io.standel.cards.models.Game
 import io.standel.cards.models.response.GameCreationResponse
-import io.standel.cards.models.response.GenericStatus
 import io.standel.cards.repositories.GameRepository
+import io.standel.cards.services.GameManager
 import org.koin.ktor.ext.inject
 
 fun Application.configureRouting() {
+    val gameManager by inject<GameManager>()
     val gameRepo by inject<GameRepository>()
 
     routing {
         get("/game") {
-            val game = gameRepo.createGame()
-            call.respond(GameCreationResponse(game.id))
+            val gameId = gameManager.createGame()
+            call.respond(GameCreationResponse(gameId))
         }
 
         route("/game/{gameId}") {
             get {
                 val gameId = call.parameters["gameId"] ?: throw NotFoundException("Missing gameId parameter")
-                val game = gameRepo.fetchGame(gameId)
+                val game = gameRepo.fetchCensoredGame(gameId)
                 call.respond(game)
-            }
-
-            post("/shuffle") {
-                val gameId = call.parameters["gameId"] ?: throw NotFoundException("Missing gameId parameter")
-                val deckIndex = call.receive<ShuffleDeckRequest>().deckIndex
-                gameRepo.shuffleDeck(gameId, deckIndex)
-                call.respond(GenericStatus())
             }
         }
     }

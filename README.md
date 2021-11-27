@@ -34,3 +34,4 @@ java -jar ./build/libs/io.standel.cards.card-service-0.0.1-all.jar
 - `io.standel.cards.plugins` - important plugins for Ktor (routing, websockets, and serialization)
 - `io.standel.cards.repositories` - data-transfer layers
 - `io.standel.cards.utils` - code-level synchronous utilities
+- `io.standel.cards.services` - responsibility managers
