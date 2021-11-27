@@ -19,6 +19,7 @@ class GameRepository(
 ) {
     // A very fancy in-memory database for POC
     private val games: MutableMap<String, Game> = Collections.synchronizedMap(mutableMapOf())
+    private val gameCleanupJobs: MutableMap<String, Job> = Collections.synchronizedMap(mutableMapOf())
 
     private suspend fun updateSessions(socketMessage: SocketMessage, gameId: String) {
         socketSessions.filter { it.gameId == gameId }.forEach {
@@ -31,7 +32,7 @@ class GameRepository(
         this.games[newGame.id] = newGame
         log.info("Created game ${newGame.id}")
         // Remove the game if it's never used
-        cleanupGameSession(newGame)
+        startGameCleanupListener(newGame)
         return newGame
     }
 
@@ -39,15 +40,27 @@ class GameRepository(
         return this.games[gameId] ?: throw NotFoundException("No game found for $gameId")
     }
 
-    fun removeGame(gameId: String) {
+    private fun removeGame(gameId: String) {
         this.games[gameId] ?: throw NotFoundException("No game found for $gameId")
         log.info("Removing game $gameId")
         this.games.remove(gameId)
     }
 
+    fun cancelCleanupListener(game: Game) {
+        val oldJob = gameCleanupJobs[game.id]
+        if (oldJob != null) {
+            log.info("Closing out old cleanup listener for game ${game.id}")
+            oldJob.cancel()
+            gameCleanupJobs.remove(game.id)
+        }
+    }
+
     // remove empty games after events which could cause them
-    suspend fun cleanupGameSession(game: Game) {
-        GlobalScope.launch {
+    suspend fun startGameCleanupListener(game: Game) {
+        // Ensure a game doesn't have multiple listeners on it
+        cancelCleanupListener(game)
+        gameCleanupJobs[game.id] = GlobalScope.launch {
+            log.info("Creating cleanup listener for ${game.id}")
             // If this game has no players after delay, delete it
             delay(timeMillis = 1.minutes.toLong(DurationUnit.MILLISECONDS))
             if (game.players.isEmpty()) {
@@ -55,10 +68,6 @@ class GameRepository(
                 removeGame(game.id)
             }
         }
-    }
-
-    suspend fun cleanupGameSession(gameId: String) {
-        cleanupGameSession(fetchGame(gameId))
     }
 
     suspend fun shuffleDeck(gameId: String, deckIndex: Int) {

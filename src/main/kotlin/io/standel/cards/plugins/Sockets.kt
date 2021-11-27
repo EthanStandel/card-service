@@ -42,6 +42,8 @@ fun Application.configureSockets() {
                 try {
                     val game = gameRepo.fetchGame(gameId)
                     game.players[username] = CardHolder(username)
+                    log.info("Game $gameId has been populated by $username")
+                    gameRepo.cancelCleanupListener(game)
 
                     try {
                         // Waiting for close
@@ -54,7 +56,9 @@ fun Application.configureSockets() {
                         // Remove player from game
                         game.players.remove(username)
                         // Cleanup the game if it's empty
-                        gameRepo.cleanupGameSession(game)
+                        if (game.players.isEmpty()) {
+                            gameRepo.startGameCleanupListener(game)
+                        }
                     }
                 } catch (exception: NotFoundException) {
                     log.info("Closing connection for $username due to no game $gameId")
