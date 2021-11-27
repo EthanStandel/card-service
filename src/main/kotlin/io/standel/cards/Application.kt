@@ -23,7 +23,7 @@ fun Application.module() {
             single(named("socketSessions")) {
                 Collections.synchronizedSet<SocketSession>(LinkedHashSet())
             }
-            single { GameRepository(get(named("socketSessions")), get()) }
+            single { GameRepository(get(), get(named("socketSessions")), get()) }
         })
     }
     configureRouting()
