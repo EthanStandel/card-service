@@ -5,5 +5,5 @@ import io.ktor.http.cio.websocket.*
 data class SocketSession(
     val session: DefaultWebSocketSession,
     val gameId: String,
-    val userName: String
+    val username: String
 )
