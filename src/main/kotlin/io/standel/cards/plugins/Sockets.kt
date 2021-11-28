@@ -8,6 +8,7 @@ import io.ktor.application.*
 import io.ktor.features.*
 import io.ktor.routing.*
 import io.standel.cards.models.SocketSession
+import io.standel.cards.models.SocketSessionsContainer
 import io.standel.cards.models.request.IncomingSocketMessage
 import io.standel.cards.models.response.OutgoingMessageType
 import io.standel.cards.models.response.OutgoingSocketMessage
@@ -25,7 +26,7 @@ fun Application.configureSockets() {
     }
 
     routing {
-        val socketSessions by inject<MutableSet<SocketSession>>(named("socketSessions"))
+        val socketSessions by inject<SocketSessionsContainer>()
         val gameManager by inject<GameManager>()
         val gson by inject<Gson>()
         val log by inject<Logger>()
@@ -38,34 +39,31 @@ fun Application.configureSockets() {
             } else {
                 val socketSession = SocketSession(this, gameId, username)
                 log.info("Opening connection for $username at game $gameId")
-                socketSessions += socketSession
                 try {
                     // Add player to game
                     gameManager.connectToGame(gameId, username)
-
-                    try {
-                        // Waiting for close
-                        for (frame in incoming) {
-                            if (frame is Frame.Text) {
-                                try {
-                                    val message = gson.fromJson(frame.readText(), IncomingSocketMessage::class.java)
-                                    gameManager.handleEvent(message, username, gameId)
-                                } catch (e: Exception) {
-                                    socketSession.session.send(gson.toJson(OutgoingSocketMessage(OutgoingMessageType.BAD_REQUEST, mapOf("message" to (e.message ?: "")))))
-                                }
-                            } else {
-                                log.info("Incoming non-text frame from $username ignored")
+                    socketSessions.addSession(socketSession)
+                    // Waiting for close
+                    for (frame in incoming) {
+                        if (frame is Frame.Text) {
+                            try {
+                                val message = gson.fromJson(frame.readText(), IncomingSocketMessage::class.java)
+                                gameManager.handleEvent(message, username, gameId)
+                            } catch (e: Exception) {
+                                socketSession.session.send(gson.toJson(OutgoingSocketMessage(OutgoingMessageType.BAD_REQUEST, mapOf("message" to (e.message ?: "")))))
                             }
+                        } else {
+                            log.info("Incoming non-text frame from $username ignored")
                         }
-                    } finally {
-                        log.info("Closing connection for $username at game $gameId")
-                        socketSessions -= socketSession
-                        // Remove player from game
-                        gameManager.disconnectFromGame(gameId, username)
                     }
                 } catch (exception: NotFoundException) {
                     log.info("Closing connection for $username due to no game $gameId")
                     close(CloseReason(CloseReason.Codes.CANNOT_ACCEPT, gson.toJson(OutgoingSocketMessage(OutgoingMessageType.GAME_NOT_FOUND))))
+                } finally {
+                    log.info("Closing connection for $username at game $gameId")
+                    socketSessions.removeSession(socketSession)
+                    // Close game if it's now empty
+                    gameManager.disconnectFromGame(gameId)
                 }
             }
         }

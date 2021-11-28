@@ -1,9 +1,11 @@
 package io.standel.cards.services
 
 import com.google.gson.Gson
+import io.ktor.features.*
 import io.ktor.http.cio.websocket.*
 import io.standel.cards.models.Game
 import io.standel.cards.models.SocketSession
+import io.standel.cards.models.SocketSessionsContainer
 import io.standel.cards.models.request.IncomingSocketMessage
 import io.standel.cards.models.response.OutgoingMessageType
 import io.standel.cards.models.response.OutgoingSocketMessage
@@ -22,14 +24,14 @@ class GameManager(
     private val gameRepo: GameRepository,
     private val gson: Gson,
     private val log: Logger,
-    private val socketSessions: MutableSet<SocketSession>,
+    private val socketSessions: SocketSessionsContainer,
 ) {
     private val gameCleanupJobs: MutableMap<String, Job> = Collections.synchronizedMap(mutableMapOf())
 
     suspend fun createGame(): String {
         val game = gameRepo.createGame()
         // Just in case no one joins
-        startGameCleanupListener(game)
+        startGameCleanupListener(game.id)
         return game.id
     }
 
@@ -48,58 +50,64 @@ class GameManager(
     }
 
     suspend fun connectToGame(gameId: String, username: String) {
-        gameRepo.addPlayer(gameId, username)
-        log.info("Game $gameId has been populated by $username")
+        try {
+            gameRepo.addPlayer(gameId, username)
+            log.info("Game $gameId has been populated by $username")
+        } catch (e: BadRequestException) {
+            if (socketSessions.list.any { username == it.username && gameId == it.gameId }) {
+                throw e
+            } else {
+                log.info("User $username has reconnected to game $gameId")
+            }
+        }
         cancelCleanupListener(gameId)
         updateGameSessions(OutgoingSocketMessage(OutgoingMessageType.NEW_PLAYER, mapOf("user" to username)), gameId)
     }
 
-    suspend fun disconnectFromGame(gameId: String, username: String) {
-        gameRepo.removePlayer(gameId, username)
-        val game = gameRepo.fetchGame(gameId)
+    suspend fun disconnectFromGame(gameId: String) {
         // Cleanup the game if it's empty
-        if (game.players.isEmpty()) {
-            startGameCleanupListener(game)
+        if (isGameEmpty(gameId)) {
+            startGameCleanupListener(gameId)
         }
     }
 
+    private fun isGameEmpty(gameId: String): Boolean {
+        return socketSessions.list.none { it.gameId == gameId }
+    }
+
     private suspend fun updateUserSession(message: OutgoingSocketMessage, gameId: String, username: String) {
-        socketSessions.filter { it.gameId == gameId && it.username == username }
+        socketSessions.list.filter { it.gameId == gameId && it.username == username }
             .forEach { it.session.send(Frame.Text(gson.toJson(message))) }
     }
 
     private suspend fun updateGameSessions(message: OutgoingSocketMessage, gameId: String, excludedUsers: List<String> = emptyList()) {
-        socketSessions.filter { it.gameId == gameId && !excludedUsers.contains(it.username) }.forEach {
+        socketSessions.list.filter { it.gameId == gameId && !excludedUsers.contains(it.username) }.forEach {
             it.session.send(Frame.Text(gson.toJson(message)))
         }
     }
 
     // remove empty games after events which could cause them
-    private suspend fun startGameCleanupListener(game: Game) {
+    private suspend fun startGameCleanupListener(gameId: String) {
         // Ensure a game doesn't have a listener already on it
-        cancelCleanupListener(game)
-        gameCleanupJobs[game.id] = GlobalScope.launch {
-            log.info("Creating cleanup listener for ${game.id}")
-            // If this game has no players after delay, delete it
+        cancelCleanupListener(gameId)
+        gameCleanupJobs[gameId] = GlobalScope.launch {
+            log.info("Creating cleanup listener for $gameId")
+            // If this game has no connected players after delay, delete it
             delay(timeMillis = 1.minutes.toLong(DurationUnit.MILLISECONDS))
-            if (game.players.isEmpty()) {
-                log.info("Clearing out unused game ${game.id}")
-                gameRepo.removeGame(game.id)
+            if (isGameEmpty(gameId)) {
+                log.info("Clearing out unused game $gameId")
+                gameRepo.removeGame(gameId)
             }
-            gameCleanupJobs.remove(game.id)
-        }
-    }
-
-    private fun cancelCleanupListener(game: Game) {
-        val oldJob = gameCleanupJobs[game.id]
-        if (oldJob != null) {
-            log.info("Closing out cleanup listener for game ${game.id}")
-            oldJob.cancel()
-            gameCleanupJobs.remove(game.id)
+            gameCleanupJobs.remove(gameId)
         }
     }
 
     private fun cancelCleanupListener(gameId: String) {
-        cancelCleanupListener(gameRepo.fetchGame(gameId))
+        val oldJob = gameCleanupJobs[gameId]
+        if (oldJob != null) {
+            log.info("Closing out cleanup listener for game $gameId")
+            oldJob.cancel()
+            gameCleanupJobs.remove(gameId)
+        }
     }
 }
