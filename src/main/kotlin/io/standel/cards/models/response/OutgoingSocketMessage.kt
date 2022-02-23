@@ -1,6 +1,6 @@
 package io.standel.cards.models.response
 
-data class OutgoingSocketMessage(val type: OutgoingMessageType, val payload: Map<String, String> = emptyMap())
+data class OutgoingSocketMessage(val event: OutgoingMessageType, val payload: Map<String, String> = emptyMap())
 
 enum class OutgoingMessageType {
     DECK_SHUFFLED,

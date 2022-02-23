@@ -1,6 +1,6 @@
 package io.standel.cards.models.request
 
-data class IncomingSocketMessage(val type: IncomingMessageType, val payload: Map<String, String> = emptyMap())
+data class IncomingSocketMessage(val action: IncomingMessageType, val payload: Map<String, String> = emptyMap())
 
 enum class IncomingMessageType {
     SHUFFLE_DECK,
