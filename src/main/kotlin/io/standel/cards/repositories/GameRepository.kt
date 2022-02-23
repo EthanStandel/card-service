@@ -53,8 +53,12 @@ class GameRepository(
         return game.players[username] ?: throw NotFoundException("No player $username found for game ${game.id}")
     }
 
-    fun fetchDeck(game: Game, deckIndex: Int): MutableList<Card> {
-        return game.decks[deckIndex] ?: throw NotFoundException("No deckIndex $deckIndex found for game ${game.id}")
+    private fun fetchDeck(game: Game, deckIndex: Int): MutableList<Card> {
+        return if (deckIndex in game.decks.indices) {
+            game.decks[deckIndex]
+        } else {
+            throw NotFoundException("No deckIndex $deckIndex found for game ${game.id}")
+        }
     }
 
     fun removeGame(gameId: String) {
@@ -71,14 +75,12 @@ class GameRepository(
         game.players[username] = CardHolder(username)
     }
 
-    fun removePlayer(gameId: String, username: String) {
-        val game = fetchGame(gameId)
-        game.players.remove(username)
-    }
-
     fun shuffleDeck(gameId: String, deckIndex: Int) {
         val game = fetchGame(gameId)
-        val deck = game.decks[deckIndex] ?: throw NotFoundException("No deck found for $deckIndex in $gameId")
+        if (deckIndex !in game.decks.indices) {
+            throw NotFoundException("No deck found for $deckIndex in $gameId")
+        }
+        val deck = game.decks[deckIndex]
         deck.shuffle()
     }
 

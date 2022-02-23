@@ -1,13 +1,9 @@
 package io.standel.cards.plugins
 
-import com.google.gson.Gson
 import io.ktor.routing.*
 import io.ktor.application.*
 import io.ktor.features.*
 import io.ktor.response.*
-import io.standel.cards.models.Card
-import io.standel.cards.models.Game
-import io.standel.cards.models.response.GameCreationResponse
 import io.standel.cards.repositories.GameRepository
 import io.standel.cards.services.GameManager
 import org.koin.ktor.ext.inject
@@ -19,7 +15,7 @@ fun Application.configureRouting() {
     routing {
         get("/game") {
             val gameId = gameManager.createGame()
-            call.respond(GameCreationResponse(gameId))
+            call.respond(gameRepo.fetchGame(gameId))
         }
 
         route("/game/{gameId}") {
